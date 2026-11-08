@@ -1,0 +1,32 @@
+name: GiaNo native decompilation
+on:
+  push:
+    branches: [giano-ios15-analysis]
+    paths: ['scripts/**', '.github/workflows/giano-decompile.yml']
+permissions:
+  contents: read
+jobs:
+  decompile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Download official Ghidra release
+        run: |
+          curl --fail --location --retry 3 https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.0.4_build/ghidra_12.0.4_PUBLIC_20260303.zip -o /tmp/ghidra.zip
+          unzip -q /tmp/ghidra.zip -d /tmp
+      - name: Decompile original Mach-O
+        run: |
+          mkdir -p unpacked decompilation /tmp/giano-project
+          unzip -q GiaNo-0.1.15-build20-unsigned.ipa -d unpacked
+          /tmp/ghidra_12.0.4_PUBLIC/support/analyzeHeadless /tmp/giano-project GiaNo -import unpacked/Payload/ZaloRebuilt.app/ZaloRebuilt -analysisTimeoutPerFile 900 -scriptPath scripts -postScript ExportGiaNo.java "$PWD/decompilation" -log "$PWD/decompilation/analysis.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: GiaNo-native-decompilation
+          path: decompilation/
+          retention-days: 7
