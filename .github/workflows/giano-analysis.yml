@@ -1,0 +1,42 @@
+name: GiaNo macOS binary analysis
+on:
+  push:
+    branches: [main, giano-ios15-analysis]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  analyze:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect and demangle original executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p analysis
+          BIN=inputs/ZaloRebuilt.macho
+          if [ ! -f "$BIN" ]; then
+            IPA=$(find . -type f -name "*.ipa" -print -quit)
+            if [ -z "$IPA" ]; then echo "Upload the original IPA to this repository first."; exit 1; fi
+            mkdir -p unpacked
+            unzip -q "$IPA" -d unpacked
+            BIN=$(find unpacked/Payload -type f -name ZaloRebuilt -print -quit)
+          fi
+          test -f "$BIN"
+          shasum -a 256 "$BIN" > analysis/sha256.txt
+          xcrun swift-demangle --version > analysis/tool-version.txt
+          xcrun nm -nm "$BIN" > analysis/symbols-mangled.txt
+          xcrun swift-demangle < analysis/symbols-mangled.txt > analysis/symbols-demangled.txt
+          xcrun otool -l "$BIN" > analysis/load-commands.txt
+          xcrun otool -L "$BIN" > analysis/libraries.txt
+          xcrun otool -tvV "$BIN" > analysis/disassembly.txt
+          xcrun otool -ov "$BIN" > analysis/objc-metadata.txt
+          grep -E 'NavigationStack|NavigationPath|CoreTransferable|PhotosPicker|presentationDetents' analysis/symbols-demangled.txt > analysis/ios16-imports.txt || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GiaNo-macos-analysis
+          path: analysis/
+          retention-days: 7
+
